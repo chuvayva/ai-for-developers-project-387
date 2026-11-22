@@ -1,0 +1,38 @@
+name: docker
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the image
+        run: docker build -t calendar .
+
+      # Hexlet's check runs the image with PORT=8080 and expects 200 from the home page.
+      - name: Start the image and check that it answers on PORT
+        run: |
+          docker run -d --name calendar -e PORT=8080 -p 8080:8080 calendar
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8080/api/health; then
+              curl -sf -o /dev/null http://127.0.0.1:8080/ && exit 0
+              break
+            fi
+            sleep 1
+          done
+          docker logs calendar
+          exit 1

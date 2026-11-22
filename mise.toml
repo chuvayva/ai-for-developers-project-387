@@ -1,0 +1,40 @@
+# One toolchain for developers, git hooks and CI: `mise run setup` once, then `mise run check`.
+[tools]
+node = "24.22.3"
+pnpm = "12.22.0"
+hk = "2.13.0"
+oxlint = "1.94.0"
+oxfmt = "0.79.0"
+
+[tasks.setup]
+description = "Install dependencies and the git hooks"
+run = ["pnpm install", "hk install --mise"]
+
+[tasks.check]
+description = "Run every check, the same set CI runs"
+run = ["pnpm install --frozen-lockfile", "hk check --all"]
+
+[tasks.e2e]
+description = "Start a fresh API and interface, run the end-to-end tests in a browser, stop both"
+run = [
+  "pnpm install --frozen-lockfile",
+  # CI runners also need the system libraries Chromium links to.
+  "pnpm --filter @calendar/e2e exec playwright install ${CI:+--with-deps} chromium",
+  "pnpm --filter @calendar/e2e e2e",
+]
+
+[tasks.fix]
+description = "Apply the safe automatic fixes"
+run = "hk fix --all"
+
+[tasks.server]
+description = "Start the API on http://127.0.0.1:3000, restarting on changes"
+run = "pnpm --filter @calendar/server dev"
+
+[tasks.web]
+description = "Start the interface on http://localhost:5173"
+run = "pnpm --filter @calendar/web dev"
+
+[tasks.dev]
+description = "Start the API and the interface together"
+depends = ["server", "web"]

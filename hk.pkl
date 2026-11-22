@@ -1,0 +1,50 @@
+amends "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Builtins.pkl"
+
+// Seconds-fast checks on changed files. The commit hook runs these and applies their fixes.
+local fast = new Mapping<String, Step> {
+    ["oxlint"] = Builtins.ox_lint
+    ["oxfmt"] = Builtins.oxfmt
+}
+
+// Whole-project checks. Typecheck needs the types generated from the TypeSpec contract.
+local all = (fast) {
+    ["api"] {
+        check = "pnpm --silent --filter @calendar/api build"
+    }
+    ["typecheck"] {
+        depends = List("api")
+        check = "pnpm --silent -r typecheck"
+    }
+    ["test"] {
+        check = "pnpm --silent -r test"
+    }
+    ["build"] {
+        check = "pnpm --silent --filter @calendar/web build"
+    }
+}
+
+hooks {
+    ["pre-commit"] {
+        fix = true
+        stash = "git"
+        steps = fast
+    }
+    ["commit-msg"] {
+        steps {
+            ["commitlint"] {
+                check = "pnpm exec commitlint --edit \"{{commit_msg_file}}\""
+            }
+        }
+    }
+    ["pre-push"] {
+        steps = all
+    }
+    ["check"] {
+        steps = all
+    }
+    ["fix"] {
+        fix = true
+        steps = fast
+    }
+}
