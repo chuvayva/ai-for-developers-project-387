@@ -114,6 +114,12 @@ Issues live in this repo's GitHub Issues, through the `gh` CLI. See `docs/agents
 
 The five default triage labels, each named after its role. See `docs/agents/triage-labels.md`.
 
+### Auto triage
+
+The `triage` job in `.github/workflows/claude.yml` runs the triage skill on every new issue from the owner, a member or a collaborator. Like the `claude` job, it installs the skills from the `mattpocock-skills` plugin. Its instruction is the `prompt` of that job, because the `issues` event starts it and no comment carries one. The prompt starts with `/mattpocock-skills:triage`, because the skill sets `disable-model-invocation` and the Skill tool cannot load it. It reads the issue and the code, applies `bug` or `enhancement`, and posts one comment. An issue that lacks detail gets `needs-info` and numbered questions for the reporter. A complete issue gets `needs-triage` and a recommended state. The maintainer applies `ready-for-agent`, `ready-for-human` and `wontfix`.
+
+The job skips an issue opened with the `ready-for-agent` label. `to-spec` and `to-tickets` publish their issues with that label, so pass it to `gh issue create --label` and do not add it afterwards. The job also skips an issue that mentions `@claude`, which the `claude` job answers.
+
 ### Domain docs
 
 Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
