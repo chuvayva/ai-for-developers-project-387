@@ -47,6 +47,13 @@ jobs:
         with:
           fetch-depth: 1
 
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+
+      - name: Install project dependencies and git hooks
+        run: mise run setup
+
       - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          plugin_marketplaces: https://github.com/mattpocock/skills.git
+          plugins: mattpocock-skills@mattpocock
