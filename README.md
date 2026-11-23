@@ -73,6 +73,28 @@ docker build -t calendar .
 docker run --rm -e PORT=8080 -p 8080:8080 calendar   # http://localhost:8080
 ```
 
+## Еженедельный аудит кода
+
+Воркфлоу `.github/workflows/code-audit.yml` (Weekly Code Audit) каждый понедельник в 06:00 UTC запускает Claude. Агент ищет в отслеживаемых файлах комментарии TODO, FIXME и HACK без учёта регистра. Для каждой находки он сначала ищет подходящее issue, открытое или закрытое, и создаёт новое только если его нет, не больше 5 за запуск. Код агент не меняет, веток и PR не создаёт. Одновременно идёт только один аудит, job ограничен 15 минутами.
+
+Ручной запуск, из вкладки Actions или командой:
+
+```bash
+gh workflow run code-audit.yml                     # обычный аудит
+gh workflow run code-audit.yml -f task="..." -f model=claude-opus-5-5   # разовая задача
+```
+
+Результат каждого запуска хранится в четырёх местах:
+
+- Job Summary запуска в Actions, даже если находок нет или агент упал.
+- Артефакт `code-audit-<run_id>` с `report.md` и журналом агента `execution.json`. Он хранится 14 дней.
+- Issue [Code audit log (#13)](https://github.com/chuvayva/ai-for-developers-project-387/issues/13). Запуск добавляет в него комментарий, только когда результат изменился.
+- Отдельные issues по новым находкам, например [#12](https://github.com/chuvayva/ai-for-developers-project-387/issues/12).
+
+Проверочный прогон: [45241868803](https://github.com/chuvayva/ai-for-developers-project-387/actions/runs/45241868803). Он нашёл тестовый `todo:`, создал #12 и журнал #13. Повторный прогон [45242055336](https://github.com/chuvayva/ai-for-developers-project-387/actions/runs/45242055336) ничего не продублировал.
+
+Что пришлось уточнять при настройке и что изменилось в постановке задачи, записано в [docs/code-audit.md](docs/code-audit.md).
+
 ## Хранение данных
 
 Типы событий и бронирования хранятся в памяти процесса, базы данных нет. Перезапуск удаляет все данные.
