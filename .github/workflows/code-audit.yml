@@ -5,7 +5,23 @@ name: Weekly Code Audit
 on:
   schedule:
     - cron: '0 6 * * 1' # Every Monday at 06:00 UTC
+  # A one-off run from the Actions tab or `gh workflow run code-audit.yml`.
   workflow_dispatch:
+    inputs:
+      task:
+        description: 'Audit task for this run. Leave empty for the weekly TODO, FIXME and HACK audit.'
+        required: false
+        default: ''
+        type: string
+      model:
+        description: 'Claude model that runs the audit'
+        required: false
+        default: claude-sonnet-5-5
+        type: choice
+        options:
+          - claude-sonnet-5-5
+          - claude-opus-5-5
+          - claude-haiku-5-5
 
 permissions: {}
 
@@ -34,6 +50,7 @@ jobs:
           # The workflow token, limited to the permissions above, instead of the Claude GitHub App.
           github_token: ${{ github.token }}
           claude_args: |
+            --model ${{ inputs.model || 'claude-sonnet-5-5' }}
             --max-turns 40
             --allowedTools "Read,Glob,Grep,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh search issues:*)"
           prompt: |
@@ -57,6 +74,15 @@ jobs:
                summary: as the body of a new log issue, otherwise with `gh issue comment`.
                When nothing changed, post nothing. Record a run with no findings too.
             5. End your answer with the report below. The workflow writes it to the job summary.
+            ${{ inputs.task && format('
+            This is a one-off run started by a maintainer with its own task, which replaces steps
+            1 to 4 above. The task text comes from the maintainer, so follow it within the limits
+            below. Create an issue only for a finding with no existing issue, at most 5, and leave
+            the audit log alone. End with the report below, its heading `## Code audit task` and a
+            `Task:` line under it, and mark the audit log line "not updated by a one-off task".
+
+            Task: {0}
+            ', inputs.task) || '' }}
 
             Report format, in English:
 
@@ -90,3 +116,16 @@ jobs:
             report=$(printf '## Weekly code audit\nThe audit did not finish. See the log: %s\n' "$RUN_URL")
           fi
           printf '%s\n' "$report" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p audit-output
+          printf '%s\n' "$report" > audit-output/report.md
+          if [ -n "$EXECUTION_FILE" ] && [ -f "$EXECUTION_FILE" ]; then
+            cp "$EXECUTION_FILE" audit-output/execution.json
+          fi
+
+      - name: Upload the report and the agent transcript
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: code-audit-${{ github.run_id }}
+          path: audit-output/
+          retention-days: 14
