@@ -35,6 +35,12 @@ mise run check   # линтер, форматтер, генерация OpenAPI 
 mise run e2e     # тесты Playwright в Chromium на свежем сервере и интерфейсе
 ```
 
+`jactionlint` проверяет `.github/workflows/claude.yml` при коммите, перед push и в `mise run check` (в том числе в CI). Версия закреплена в `mise.toml`; правила корректности, безопасности и политик включены по умолчанию. Отдельный запуск:
+
+```bash
+mise exec -- jactionlint .github/workflows/claude.yml
+```
+
 ## Использование
 
 Одна команда запускает сервер и фронтенд вместе, `Ctrl+C` останавливает оба.

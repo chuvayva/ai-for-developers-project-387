@@ -23,7 +23,7 @@ Every change to the HTTP API starts in `api/main.tsp`. `pnpm --filter @calendar/
 
 `mise run verify` is the one gate, and CI runs the same command, in `.github/workflows/check.yml`, on every push to `main` and every pull request. It runs `mise run check` and then `mise run e2e`. A change is done when it passes.
 
-`mise run check` runs the steps in `hk.pkl`: lint (oxlint), format (oxfmt), contract generation, typecheck, tests and the web build. It takes seconds, so run it while you work and `mise run verify` before you push.
+`mise run check` runs the steps in `hk.pkl`: lint (oxlint), format (oxfmt), workflow lint (jactionlint for `.github/workflows/claude.yml`), contract generation, typecheck, tests and the web build. It takes seconds, so run it while you work and `mise run verify` before you push.
 
 `mise run fix` applies the safe lint and format fixes. `mise run setup` installs dependencies and the git hooks. The hooks lint and format staged files on commit, check the commit message, and run `mise run check` on push.
 

@@ -5,6 +5,10 @@ import "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Builtin
 local fast = new Mapping<String, Step> {
     ["oxlint"] = Builtins.ox_lint
     ["oxfmt"] = Builtins.oxfmt
+    ["jactionlint"] {
+        glob = List(".github/workflows/claude.yml")
+        check = "jactionlint {{files}}"
+    }
 }
 
 // Whole-project checks. Typecheck needs the types generated from the TypeSpec contract.
