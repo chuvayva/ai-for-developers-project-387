@@ -1,6 +1,6 @@
 import { Anchor, Container, Paper, Stack, Text, Title } from '@mantine/core';
 import { Link } from 'react-router';
-import { type Booking, listBookings } from '../api/client.ts';
+import { type Booking, listBookings, send } from '../api/client.ts';
 import { formatHostInterval, HOST_TIME_ZONE } from '../hostTime.ts';
 import { useLoadOnMount } from '../useLoadOnMount.ts';
 
@@ -27,8 +27,10 @@ function BookingList({ bookings }: { bookings: Booking[] }) {
   );
 }
 
+const load = () => send(listBookings());
+
 export function HostBookingsPage() {
-  const { value: bookings, loading } = useLoadOnMount(listBookings, []);
+  const { value: bookings, loading } = useLoadOnMount(load, []);
 
   return (
     <Container size="sm" py="xl">

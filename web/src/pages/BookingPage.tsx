@@ -7,6 +7,7 @@ import {
   type EventType,
   getEventType,
   listSlots,
+  send,
   type Slot,
   type SlotDay,
 } from '../api/client.ts';
@@ -244,7 +245,8 @@ export function BookingPage() {
       }
     };
 
-    Promise.all([getEventType(eventTypeId), listSlots(eventTypeId)]).then(
+    const path = { eventTypeId };
+    Promise.all([send(getEventType({ path })), send(listSlots({ path }))]).then(
       ([eventType, days]) => setOutcome({ state: 'loaded', eventType, days, slotsAreStale: false }),
       (error: unknown) => {
         const isNotFound =
@@ -270,7 +272,7 @@ export function BookingPage() {
       );
     };
 
-    listSlots(eventTypeId).then(
+    send(listSlots({ path: { eventTypeId } })).then(
       (days) => setSlots({ days, slotsAreStale: false }),
       () => setSlots({ slotsAreStale: true }),
     );

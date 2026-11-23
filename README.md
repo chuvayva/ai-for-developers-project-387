@@ -23,10 +23,17 @@ cd ai-for-developers-project-387
 mise trust
 mise install
 mise run setup
-mise run check
+mise run verify
 ```
 
-`mise run setup` ставит зависимости и git-хуки. `mise run check` запускает линтер и форматтер, генерирует OpenAPI из TypeSpec, проверяет типы, запускает тесты и собирает фронтенд. Ту же команду запускает CI.
+`mise run setup` ставит зависимости и git-хуки. `mise run verify` запускает все проверки и затем браузерные тесты. Ту же команду запускает CI.
+
+Её можно разбить на две части:
+
+```bash
+mise run check   # линтер, форматтер, генерация OpenAPI и SDK из TypeSpec, типы, тесты, сборка фронтенда
+mise run e2e     # тесты Playwright в Chromium на свежем сервере и интерфейсе
+```
 
 ## Использование
 
@@ -49,7 +56,7 @@ mise run web      # только интерфейс
 curl http://127.0.0.1:3000/api/health   # {"status":"ok"}
 ```
 
-Контракт API описан в `api/main.tsp`. Команда `pnpm --filter @calendar/api build` собирает из него `api/generated/openapi.yaml` и типы TypeScript для сервера и фронтенда.
+Контракт API описан в `api/main.tsp`. Команда `pnpm --filter @calendar/api build` собирает из него `api/generated/openapi.yaml`, типы TypeScript для сервера и клиентский SDK для фронтенда: по функции на каждую операцию контракта, с адресом запроса и типами. Фронтенд ходит в API только через этот SDK, поэтому изменение контракта, которое не дошло до интерфейса, ломает проверку типов.
 
 ## Docker
 

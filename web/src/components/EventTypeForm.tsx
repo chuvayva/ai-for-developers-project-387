@@ -1,6 +1,6 @@
 import { Alert, Button, NumberInput, Stack, Textarea, TextInput } from '@mantine/core';
 import { type FormEvent, useState } from 'react';
-import { createEventType, type EventType } from '../api/client.ts';
+import { createEventType, type EventType, send } from '../api/client.ts';
 import { failureText } from '../api/failureText.ts';
 import { characters } from './characters.ts';
 
@@ -60,11 +60,15 @@ export function EventTypeForm({ onCreated }: { onCreated: (eventType: EventType)
 
     setSending(true);
     try {
-      const eventType = await createEventType({
-        name: values.name,
-        description: values.description,
-        durationMinutes: values.duration,
-      });
+      const eventType = await send(
+        createEventType({
+          body: {
+            name: values.name,
+            description: values.description,
+            durationMinutes: values.duration,
+          },
+        }),
+      );
       setValues(emptyValues);
       onCreated(eventType);
     } catch (error) {

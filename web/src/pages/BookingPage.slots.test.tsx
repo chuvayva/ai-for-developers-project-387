@@ -152,8 +152,8 @@ test('an unknown event type shows a not found state', async () => {
 
 test('the id in the address is sent to the server as one path segment', async () => {
   const requested: string[] = [];
-  vi.stubGlobal('fetch', async (input: string) => {
-    requested.push(input);
+  vi.stubGlobal('fetch', async (request: Request) => {
+    requested.push(new URL(request.url).pathname);
     return notFound();
   });
 

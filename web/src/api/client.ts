@@ -1,12 +1,29 @@
-import type { components } from '@calendar/api';
+import { client, type ErrorCode } from '@calendar/api/client';
 
-export type ErrorCode = components['schemas']['ErrorCode'];
-export type EventType = components['schemas']['EventType'];
-export type Slot = components['schemas']['Slot'];
-export type SlotDay = components['schemas']['SlotDay'];
-export type CreateEventTypeRequest = components['schemas']['CreateEventTypeRequest'];
-export type Booking = components['schemas']['Booking'];
-export type CreateBookingRequest = components['schemas']['CreateBookingRequest'];
+// Pages call the SDK that `@calendar/api` generates from the contract, one
+// function per operation, and pass each call through `send`.
+export {
+  createBooking,
+  createEventType,
+  getEventType,
+  listBookings,
+  listEventTypes,
+  listSlots,
+} from '@calendar/api/client';
+export type {
+  Booking,
+  CreateBookingRequest,
+  CreateEventTypeRequest,
+  ErrorCode,
+  EventType,
+  Slot,
+  SlotDay,
+} from '@calendar/api/client';
+
+// The paths in the contract start with `/api`, and the API answers on the
+// origin that serves the page: the Vite proxy in development, the server in
+// the image.
+client.setConfig({ baseUrl: globalThis.location.origin });
 
 /**
  * A request the server answered with a failure. `code` is the `ApiError` code,
@@ -15,64 +32,34 @@ export type CreateBookingRequest = components['schemas']['CreateBookingRequest']
 export class ApiRequestError extends Error {
   readonly code: ErrorCode | undefined;
 
-  constructor(status: number, code: ErrorCode | undefined) {
-    super(`The API answered ${status}${code ? ` ${code}` : ''}`);
+  constructor(status: number | undefined, code: ErrorCode | undefined) {
+    super(`The API answered ${status ?? 'nothing'}${code ? ` ${code}` : ''}`);
     this.name = 'ApiRequestError';
     this.code = code;
   }
 }
 
-async function readErrorCode(response: Response): Promise<ErrorCode | undefined> {
-  try {
-    const body: unknown = await response.json();
-    if (typeof body === 'object' && body !== null && 'code' in body) {
-      // An unknown code has no text of its own, so the general text is shown.
-      return body.code as ErrorCode;
-    }
-  } catch {
-    // The body is not JSON, so it is not an `ApiError`.
+function errorCode(error: unknown): ErrorCode | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    // An unknown code has no text of its own, so the general text is shown.
+    return error.code as ErrorCode;
   }
   return undefined;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, init);
-  if (!response.ok) {
-    throw new ApiRequestError(response.status, await readErrorCode(response));
+type SdkResult = { data: unknown; error: unknown; response?: Response };
+
+/** The body of a successful answer, from the branch of the result with no error. */
+type Data<R> = R extends { error: undefined; data: infer T } ? T : never;
+
+/**
+ * Waits for an SDK call and returns the body of its success. A failure throws
+ * `ApiRequestError`.
+ */
+export async function send<R extends SdkResult>(call: Promise<R>): Promise<Data<R>> {
+  const result = await call;
+  if (result.error !== undefined) {
+    throw new ApiRequestError(result.response?.status, errorCode(result.error));
   }
-  return (await response.json()) as T;
-}
-
-function post<T>(path: string, body: unknown): Promise<T> {
-  return request<T>(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}
-
-export function listEventTypes(): Promise<EventType[]> {
-  return request('/event-types');
-}
-
-export function getEventType(eventTypeId: string): Promise<EventType> {
-  return request(`/event-types/${encodeURIComponent(eventTypeId)}`);
-}
-
-/** The 14 days of the booking window, each with the slots of the event type. */
-export function listSlots(eventTypeId: string): Promise<SlotDay[]> {
-  return request(`/event-types/${encodeURIComponent(eventTypeId)}/slots`);
-}
-
-export function createEventType(body: CreateEventTypeRequest): Promise<EventType> {
-  return post('/event-types', body);
-}
-
-/** The upcoming bookings, which have not ended yet, the soonest first. */
-export function listBookings(): Promise<Booking[]> {
-  return request('/bookings');
-}
-
-export function createBooking(body: CreateBookingRequest): Promise<Booking> {
-  return post('/bookings', body);
+  return result.data as Data<R>;
 }

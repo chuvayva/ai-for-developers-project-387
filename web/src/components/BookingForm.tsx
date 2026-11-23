@@ -5,6 +5,7 @@ import {
   type Booking,
   createBooking,
   type EventType,
+  send,
   type Slot,
 } from '../api/client.ts';
 import { failureText } from '../api/failureText.ts';
@@ -77,12 +78,16 @@ export function BookingForm(props: {
     setSending(true);
     try {
       // The name and the email go as typed. The server stores them as sent.
-      const booking = await createBooking({
-        eventTypeId: eventType.id,
-        startTime: slot.startTime,
-        guestName: values.guestName,
-        guestEmail: values.guestEmail,
-      });
+      const booking = await send(
+        createBooking({
+          body: {
+            eventTypeId: eventType.id,
+            startTime: slot.startTime,
+            guestName: values.guestName,
+            guestEmail: values.guestEmail,
+          },
+        }),
+      );
       onBooked(booking);
     } catch (error) {
       if (isSlotLost(error)) {

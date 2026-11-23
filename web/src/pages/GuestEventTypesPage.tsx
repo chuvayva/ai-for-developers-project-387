@@ -1,6 +1,6 @@
 import { Anchor, Container, Paper, Stack, Text, Title } from '@mantine/core';
 import { Link } from 'react-router';
-import { type EventType, listEventTypes } from '../api/client.ts';
+import { type EventType, listEventTypes, send } from '../api/client.ts';
 import { useLoadOnMount } from '../useLoadOnMount.ts';
 
 function EventTypeChoice({ eventTypes }: { eventTypes: EventType[] }) {
@@ -27,9 +27,11 @@ function EventTypeChoice({ eventTypes }: { eventTypes: EventType[] }) {
   );
 }
 
+const load = () => send(listEventTypes());
+
 /** Where a guest chooses the kind of call to book. */
 export function GuestEventTypesPage() {
-  const { value: eventTypes, loading } = useLoadOnMount(listEventTypes, []);
+  const { value: eventTypes, loading } = useLoadOnMount(load, []);
 
   return (
     <Container size="sm" py="xl">

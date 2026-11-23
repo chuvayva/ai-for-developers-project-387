@@ -13,15 +13,19 @@ A pnpm workspace with four packages:
 
 ## API first
 
-Every change to the HTTP API starts in `api/main.tsp`. `pnpm --filter @calendar/api build` compiles it to `api/generated/openapi.yaml` and then to `api/generated/schema.d.ts`. `server` and `web` take request and response types from `@calendar/api`, so a contract change that the code has not followed fails the typecheck.
+Every change to the HTTP API starts in `api/main.tsp`. `pnpm --filter @calendar/api build` compiles it to `api/generated/openapi.yaml`, then to the types in `api/generated/schema.d.ts` and to the client SDK in `api/generated/client/`. `server` takes its request and response types from `@calendar/api`. `web` calls the API through the SDK in `@calendar/api/client`, which has one function per operation, named after its `operationId`, with the path and the request and response types of the contract. A contract change that the code has not followed fails the typecheck.
+
+`api/openapi-ts.config.ts` configures the SDK generator, Hey API's `openapi-ts`. It is pinned to an exact version, because its 0.x releases change the generated code.
 
 `api/generated/` is gitignored build output. Change it only by editing `api/main.tsp` and regenerating. Regenerate after a fresh clone and after every contract edit. `mise run check` does this for you.
 
 ## Verifying
 
-`mise run check` is the one gate, and CI runs the same command. It runs the steps in `hk.pkl`: lint (oxlint), format (oxfmt), contract generation, typecheck, tests and the web build. A change is done when it passes.
+`mise run verify` is the one gate, and CI runs the same command, in `.github/workflows/check.yml`, on every push to `main` and every pull request. It runs `mise run check` and then `mise run e2e`. A change is done when it passes.
 
-`mise run fix` applies the safe lint and format fixes. `mise run setup` installs dependencies and the git hooks. The hooks lint and format staged files on commit, check the commit message, and run the full gate on push.
+`mise run check` runs the steps in `hk.pkl`: lint (oxlint), format (oxfmt), contract generation, typecheck, tests and the web build. It takes seconds, so run it while you work and `mise run verify` before you push.
+
+`mise run fix` applies the safe lint and format fixes. `mise run setup` installs dependencies and the git hooks. The hooks lint and format staged files on commit, check the commit message, and run `mise run check` on push.
 
 Lint rules stay on. When a rule cannot be satisfied, stop and ask for a human decision. An approved exception names one path and one rule and records the reason.
 
@@ -31,7 +35,7 @@ Lint rules stay on. When a rule cannot be satisfied, stop and ask for a human de
 
 ## End-to-end tests
 
-`mise run e2e` runs the Playwright tests in `e2e/tests/` in Chromium. It is a separate command and a separate CI job, in `.github/workflows/e2e.yml`, which runs on every push and pull request. `mise run check` and the push hook do not run it.
+`mise run e2e` runs the Playwright tests in `e2e/tests/` in Chromium. `mise run verify` runs it after the checks. `mise run check` and the push hook do not run it.
 
 The command starts its own server on `127.0.0.1:3100` and its own Vite dev server on `localhost:5273`, runs the tests and stops both. It fails when one of those ports is taken. `mise run dev` uses other ports, so both can run at once. The first run downloads Chromium.
 
@@ -68,7 +72,7 @@ Node runs the TypeScript sources directly through type stripping, with no build 
 
 Render components under test inside `MantineProvider`. `web/src/test-setup.ts` stubs `matchMedia` and `ResizeObserver`, which jsdom lacks and Mantine calls.
 
-Pages call the API through the functions in `web/src/api/client.ts`. A failed request throws `ApiRequestError`, and `failureText` in `web/src/api/failureText.ts` chooses the text to show from its code. Component tests stand in for the server by stubbing `fetch`, with the helpers in `web/src/testing.tsx`.
+Pages call the generated SDK functions that `web/src/api/client.ts` re-exports, and wrap each call in `send`, as in `send(listSlots({ path: { eventTypeId } }))`. Do not write request paths or `fetch` calls by hand. `send` returns the body of the answer. A failed request throws `ApiRequestError`, and `failureText` in `web/src/api/failureText.ts` chooses the text to show from its code. Component tests stand in for the server by stubbing `fetch`, which the SDK calls with a `Request`, with the helpers in `web/src/testing.tsx`.
 
 Show every time and day through the functions in `web/src/hostTime.ts`. They write it in the host time zone, Europe/Moscow, whatever zone the browser is in.
 

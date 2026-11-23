@@ -23,12 +23,13 @@ export function json(status: number, body: unknown): Response {
  * the request, or `undefined` when there is none.
  */
 export function stubApi(routes: Record<string, (body: unknown) => Response>) {
-  vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
-    const respond = routes[`${init?.method ?? 'GET'} ${input}`];
+  vi.stubGlobal('fetch', async (request: Request) => {
+    const respond = routes[`${request.method} ${new URL(request.url).pathname}`];
     if (!respond) {
       return new Response('Not stubbed', { status: 500 });
     }
-    return respond(init?.body === undefined ? undefined : JSON.parse(String(init.body)));
+    const text = await request.text();
+    return respond(text === '' ? undefined : JSON.parse(text));
   });
 }
 
