@@ -21,9 +21,11 @@ local all = (fast) {
         check = "pnpm --silent -r typecheck"
     }
     ["test"] {
+        depends = List("api")
         check = "pnpm --silent -r test"
     }
     ["build"] {
+        depends = List("api")
         check = "pnpm --silent --filter @calendar/web build"
     }
 }
