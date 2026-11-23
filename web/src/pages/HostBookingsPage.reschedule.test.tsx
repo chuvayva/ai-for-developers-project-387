@@ -32,8 +32,13 @@ const boris: Booking = {
   createdAt: '2026-11-21T12:20:00Z',
 };
 
-// 10:00 and 12:00 Moscow time on Tuesday, free for the intro call.
+// 10:00 and 12:00 Moscow time on Tuesday, free for the intro call. The server offers
+// the interval of Anna's own booking, 09:30 on Monday, because the request excludes it.
 const introDays: SlotDay[] = [
+  {
+    date: '2026-11-23',
+    slots: [{ startTime: '2026-11-23T06:15:00Z', endTime: '2026-11-23T06:45:00Z' }],
+  },
   {
     date: '2026-11-24',
     slots: [
@@ -47,10 +52,11 @@ type Server = {
   patch: (body: unknown) => Response;
   patched: unknown[];
   slotLoads: number;
+  slotQueries: string[];
 };
 
 function hostServer(patch: (body: unknown) => Response): Server {
-  const server: Server = { patch, patched: [], slotLoads: 0 };
+  const server: Server = { patch, patched: [], slotLoads: 0, slotQueries: [] };
   stubApi({
     'GET /api/bookings': () => json(200, [anna, boris]),
     'GET /api/event-types': () => json(200, [intro, review]),
@@ -63,6 +69,13 @@ function hostServer(patch: (body: unknown) => Response): Server {
       server.patched.push(body);
       return server.patch(body);
     },
+  });
+  const stubbed = globalThis.fetch;
+  vi.stubGlobal('fetch', (request: Request) => {
+    if (new URL(request.url).pathname.endsWith('/slots')) {
+      server.slotQueries.push(new URL(request.url).search);
+    }
+    return stubbed(request);
   });
   return server;
 }
@@ -95,6 +108,55 @@ test('rescheduling to a slot shows the new time and keeps the list in order of s
   expect(items[0]?.textContent).toContain('Boris Ivanov');
   expect(items[1]?.textContent).toContain('Anna Petrova');
   expect(items[1]?.textContent).toContain('Tue 24 Nov, 10:00 – 10:30');
+});
+
+test('the interval of the booking itself is offered and can be picked', async () => {
+  const server = hostServer((body) =>
+    json(200, { ...anna, startTime: (body as { startTime: string }).startTime }),
+  );
+  renderAt('/host/bookings');
+
+  const slots = await openAnna();
+  expect(server.slotQueries[0]).toBe('?excludeBookingId=bkg_1');
+  fireEvent.click(within(slots).getByRole('button', { name: 'Mon 23 Nov, 09:15 – 09:45' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+  await waitFor(() => expect(server.patched).toHaveLength(1));
+  expect(server.patched).toEqual([{ startTime: '2026-11-23T06:15:00Z', eventTypeId: 'evt_a' }]);
+});
+
+test('a failed reschedule keeps the chosen slot while it is still offered', async () => {
+  hostServer(() => json(500, { code: 'validation_failed', message: 'x' }));
+  renderAt('/host/bookings');
+
+  const slots = await openAnna();
+  const choice = within(slots).getByRole('button', { name: 'Tue 24 Nov, 10:00 – 10:30' });
+  fireEvent.click(choice);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+  await screen.findByRole('alert');
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole('list', { name: 'Slots' }))
+        .getByRole('button', { name: 'Tue 24 Nov, 10:00 – 10:30' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true'),
+  );
+});
+
+test('event types that cannot be loaded show an error', async () => {
+  hostServer(() => json(200, anna));
+  const stubbed = globalThis.fetch;
+  vi.stubGlobal('fetch', (request: Request) =>
+    new URL(request.url).pathname === '/api/event-types'
+      ? Promise.resolve(json(500, { code: 'validation_failed', message: 'x' }))
+      : stubbed(request),
+  );
+  renderAt('/host/bookings');
+
+  await openAnna();
+
+  expect(await screen.findByText('The event types could not be loaded.')).toBeTruthy();
 });
 
 test('the host can change only the event type and keep the time', async () => {

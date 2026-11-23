@@ -1,5 +1,5 @@
 import { Alert, Button, Group, NativeSelect, Stack, Text } from '@mantine/core';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   type Booking,
   type EventType,
@@ -12,14 +12,17 @@ import {
 import { failureText } from '../api/failureText.ts';
 import { formatHostInterval } from '../hostTime.ts';
 
-function fetchSlots(eventTypeId: string): Promise<SlotDay[] | 'failed'> {
-  return send(listSlots({ path: { eventTypeId } })).catch(() => 'failed' as const);
+/** The slots of an event type as if the booking did not exist, so its own interval is offered. */
+function fetchSlots(eventTypeId: string, bookingId: string): Promise<SlotDay[] | 'failed'> {
+  return send(listSlots({ path: { eventTypeId }, query: { excludeBookingId: bookingId } })).catch(
+    () => 'failed' as const,
+  );
 }
 
 /**
- * Lets the host move a booking to another slot, another event type, or both.
- * Keeping the current time is the default, so a change of event type alone
- * needs no slot.
+ * Lets the host reschedule a booking to another slot, another event type, or both.
+ * The current time is selected at first, so a change of event type alone
+ * needs no other choice.
  */
 export function RescheduleForm(props: {
   booking: Booking;
@@ -32,6 +35,7 @@ export function RescheduleForm(props: {
   // The slots are kept by event type, so another type reads as loading until its answer comes.
   const [slotsByType, setSlotsByType] = useState<Record<string, SlotDay[] | 'failed'>>({});
   const [startTime, setStartTime] = useState(booking.startTime);
+  const [eventTypesFailed, setEventTypesFailed] = useState(false);
   const [notice, setNotice] = useState<string>();
   const [sending, setSending] = useState(false);
 
@@ -39,22 +43,25 @@ export function RescheduleForm(props: {
     let current = true;
     send(listEventTypes()).then(
       (loaded) => current && setEventTypes(loaded),
-      () => undefined,
+      () => current && setEventTypesFailed(true),
     );
     return () => {
       current = false;
     };
   }, []);
 
-  function loadSlots(id: string) {
-    fetchSlots(id).then((loaded) => setSlotsByType((all) => ({ ...all, [id]: loaded })));
-  }
+  const loadSlots = useCallback(
+    (id: string) =>
+      fetchSlots(id, booking.id).then((loaded) => {
+        setSlotsByType((all) => ({ ...all, [id]: loaded }));
+        return loaded;
+      }),
+    [booking.id],
+  );
 
   useEffect(() => {
-    fetchSlots(eventTypeId).then((loaded) =>
-      setSlotsByType((all) => ({ ...all, [eventTypeId]: loaded })),
-    );
-  }, [eventTypeId]);
+    void loadSlots(eventTypeId);
+  }, [eventTypeId, loadSlots]);
 
   const days = slotsByType[eventTypeId];
   const offered = days === undefined || days === 'failed' ? [] : days.flatMap((day) => day.slots);
@@ -63,15 +70,21 @@ export function RescheduleForm(props: {
     setSending(true);
     setNotice(undefined);
     try {
-      const moved = await send(
+      const rescheduled = await send(
         rescheduleBooking({ path: { bookingId: booking.id }, body: { startTime, eventTypeId } }),
       );
-      props.onRescheduled(moved);
+      props.onRescheduled(rescheduled);
     } catch (error) {
       setNotice(failureText(error));
-      setStartTime(booking.startTime);
-      loadSlots(eventTypeId);
       setSending(false);
+      // The choice stays unless the refreshed slots no longer offer it.
+      const loaded = await loadSlots(eventTypeId);
+      if (
+        loaded !== 'failed' &&
+        !loaded.some((day) => day.slots.some((slot) => slot.startTime === startTime))
+      ) {
+        setStartTime(booking.startTime);
+      }
     }
   }
 
@@ -90,13 +103,7 @@ export function RescheduleForm(props: {
         }))}
       />
 
-      <Button
-        variant={startTime === booking.startTime ? 'filled' : 'default'}
-        aria-pressed={startTime === booking.startTime}
-        onClick={() => setStartTime(booking.startTime)}
-      >
-        Keep the current time
-      </Button>
+      {eventTypesFailed && <Text c="red">The event types could not be loaded.</Text>}
 
       {days === undefined && <Text c="dimmed">Loading the slots.</Text>}
       {days === 'failed' && <Text c="red">The slots could not be loaded.</Text>}
