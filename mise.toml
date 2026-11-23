@@ -1,4 +1,4 @@
-# One toolchain for developers, git hooks and CI: `mise run setup` once, then `mise run check`.
+# One toolchain for developers, git hooks and CI: `mise run setup` once, then `mise run verify`.
 [tools]
 node = "24.22.3"
 pnpm = "12.22.0"
@@ -11,7 +11,7 @@ description = "Install dependencies and the git hooks"
 run = ["pnpm install", "hk install --mise"]
 
 [tasks.check]
-description = "Run every check, the same set CI runs"
+description = "Run lint, format, contract generation, typecheck, tests and the web build"
 run = ["pnpm install --frozen-lockfile", "hk check --all"]
 
 [tasks.e2e]
@@ -22,6 +22,10 @@ run = [
   "pnpm --filter @calendar/e2e exec playwright install ${CI:+--with-deps} chromium",
   "pnpm --filter @calendar/e2e e2e",
 ]
+
+[tasks.verify]
+description = "Run every check, then the end-to-end tests: the whole gate CI runs"
+run = ["mise run check", "mise run e2e"]
 
 [tasks.fix]
 description = "Apply the safe automatic fixes"

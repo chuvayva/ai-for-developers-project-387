@@ -16,7 +16,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -25,8 +25,9 @@ jobs:
 
       - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
 
-      - name: Run every check
-        run: mise run check
+      # The checks, then the end-to-end tests in Chromium: the same command as locally.
+      - name: Run every check and the end-to-end tests
+        run: mise run verify
 
       - name: Lint commit messages
         env:
