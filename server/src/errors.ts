@@ -7,6 +7,7 @@ type ErrorCode = components['schemas']['ErrorCode'];
 const statusByCode = {
   validation_failed: 400,
   not_a_slot: 400,
+  booking_not_found: 404,
   event_type_not_found: 404,
   slot_taken: 409,
 } as const satisfies Record<ErrorCode, number>;

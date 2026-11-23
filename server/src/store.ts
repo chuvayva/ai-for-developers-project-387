@@ -20,6 +20,10 @@ export type Store = {
   getEventType(id: string): EventType | undefined;
   /** Stores the booking as given. The caller has checked that it overlaps no other. */
   createBooking(input: NewBooking): Booking;
+  /** `undefined` when no booking has this id. */
+  getBooking(id: string): Booking | undefined;
+  /** Replaces the booking that has the same id. The caller has checked that it overlaps no other. */
+  replaceBooking(booking: Booking): void;
   /** Every booking, ended ones too, in order of creation. */
   listBookings(): Booking[];
 };
@@ -45,6 +49,15 @@ export function createStore(): Store {
       const booking: Booking = { id: `bkg_${randomUUID()}`, ...input };
       bookings.push(booking);
       return booking;
+    },
+    getBooking(id) {
+      return bookings.find((booking) => booking.id === id);
+    },
+    replaceBooking(booking) {
+      const index = bookings.findIndex((existing) => existing.id === booking.id);
+      if (index !== -1) {
+        bookings[index] = booking;
+      }
     },
     listBookings() {
       return [...bookings];
