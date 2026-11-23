@@ -1,5 +1,8 @@
 name: claude
 
+# Approved exception: concurrency is set per job. A workflow-level group would make the claude
+# and triage jobs share one queue, and cancelling would drop queued @claude requests.
+# jactionlint ignore=concurrency-limits
 on:
   # Approved exception: comment commands need this trigger; the job gates trusted users
   # and checks out the default branch, not the pull request head.
@@ -15,8 +18,9 @@ on:
 
 permissions: {}
 
+# One group per run: the per-issue queue is on the claude job.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -34,6 +38,11 @@ jobs:
           (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
       )
+    # Job-level, so that a run the if skips (such as one for Claude's own comment) never
+    # joins the group and cannot replace a queued request.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
