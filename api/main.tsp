@@ -289,11 +289,16 @@ namespace Slots {
    * time zone. A day with no slot is present with an empty list. The server
    * leaves out start times that a booking overlaps or that have passed.
    *
+   * With `excludeBookingId` the slots are computed as if that booking did not
+   * exist, so its own interval is offered when it is otherwise free. This is
+   * how a host picks a new time for a booking. An id that names no booking has
+   * no effect.
+   *
    * Fails with 404 `event_type_not_found` when no event type has this id.
    */
   @operationId("listSlots")
   @get
-  op list(@path eventTypeId: string): SlotDay[] | NotFound;
+  op list(@path eventTypeId: string, @query excludeBookingId?: string): SlotDay[] | NotFound;
 }
 
 @route("/bookings")

@@ -12,17 +12,20 @@ export default async function slotRoutes(
 ) {
   const { store, now } = opts;
 
-  fastify.get<{ Params: { eventTypeId: string }; Reply: SlotDay[] }>(
-    '/event-types/:eventTypeId/slots',
-    (request, reply) => {
-      const eventType = requireEventType(store, request.params.eventTypeId);
-      reply.send(
-        listSlotDays({
-          durationMinutes: eventType.durationMinutes,
-          now: now(),
-          bookings: store.listBookings(),
-        }),
-      );
-    },
-  );
+  fastify.get<{
+    Params: { eventTypeId: string };
+    Querystring: { excludeBookingId?: string };
+    Reply: SlotDay[];
+  }>('/event-types/:eventTypeId/slots', (request, reply) => {
+    const eventType = requireEventType(store, request.params.eventTypeId);
+    const { excludeBookingId } = request.query;
+    reply.send(
+      listSlotDays({
+        durationMinutes: eventType.durationMinutes,
+        now: now(),
+        // An id that names no booking excludes nothing.
+        bookings: store.listBookings().filter((other) => other.id !== excludeBookingId),
+      }),
+    );
+  });
 }

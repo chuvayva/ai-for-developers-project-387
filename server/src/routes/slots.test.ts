@@ -125,3 +125,45 @@ test('an id that is not a valid URL component is 400 validation_failed', async (
   expect(response.statusCode).toBe(400);
   expect(response.json()).toEqual({ code: 'validation_failed', message: expect.any(String) });
 });
+
+test('excludeBookingId offers the interval of that booking and no other', async () => {
+  const app = build({ now: mondayMorning });
+  const id = await createEventType(app, 60);
+  const book = async (startTime: string) =>
+    (
+      await app.inject({
+        method: 'POST',
+        url: '/api/bookings',
+        payload: { eventTypeId: id, startTime, guestName: 'Anna', guestEmail: 'a@example.com' },
+      })
+    ).json();
+  const own = await book('2026-11-23T06:00:00Z');
+  await book('2026-11-23T07:00:00Z');
+  const starts = async (query: string) =>
+    (
+      (await app
+        .inject({ method: 'GET', url: `/api/event-types/${id}/slots${query}` })
+        .then((r) => r.json())) as { slots: { startTime: string }[] }[]
+    ).flatMap((day) => day.slots.map((slot) => slot.startTime));
+
+  const without = await starts('');
+  const excluded = await starts(`?excludeBookingId=${own.id}`);
+
+  expect(without).not.toContain('2026-11-23T06:00:00Z');
+  expect(excluded).toContain('2026-11-23T06:00:00Z');
+  expect(excluded).not.toContain('2026-11-23T07:00:00Z');
+});
+
+test('an excludeBookingId that names no booking has no effect', async () => {
+  const app = build({ now: mondayMorning });
+  const id = await createEventType(app, 60);
+  const plain = await listSlots(app, id);
+
+  const response = await app.inject({
+    method: 'GET',
+    url: `/api/event-types/${id}/slots?excludeBookingId=bkg_missing`,
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual(plain.json());
+});

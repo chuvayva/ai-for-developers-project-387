@@ -498,7 +498,7 @@ async function bookedApp(durationMinutes = 30) {
   return { app, eventTypeId, booking: created.json() };
 }
 
-test('rescheduling to a free slot keeps the identity and moves the interval', async () => {
+test('rescheduling to a free slot keeps the identity and changes the interval', async () => {
   const { app, booking } = await bookedApp();
 
   const response = await reschedule(app, booking.id, { startTime: '2026-11-23T07:00:00Z' });
@@ -640,4 +640,42 @@ test('two simultaneous reschedules to the same slot leave one winner', async () 
   ]);
 
   expect(responses.map((r) => r.statusCode).toSorted()).toEqual([200, 409]);
+});
+
+test('an omitted eventTypeId keeps the event type of the booking', async () => {
+  const { app, eventTypeId, booking } = await bookedApp(30);
+  await createEventType(app, 60, 'Other call');
+
+  const response = await reschedule(app, booking.id, { startTime: '2026-11-23T07:00:00Z' });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().eventType.id).toBe(eventTypeId);
+  expect(response.json().endTime).toBe('2026-11-23T07:30:00Z');
+});
+
+test('a booking whose call has passed can be rescheduled to a future slot', async () => {
+  let now = mondayMorning();
+  const app = build({ now: () => now });
+  const eventTypeId = await createEventType(app, 30);
+  const booking = (await createBooking(app, { eventTypeId, ...valid })).json();
+  now = new Date('2026-11-23T12:00:00Z');
+
+  const response = await reschedule(app, booking.id, { startTime: '2026-11-24T06:00:00Z' });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().id).toBe(booking.id);
+  expect(response.json().startTime).toBe('2026-11-24T06:00:00Z');
+});
+
+test.each([
+  ['a missing booking', 'bkg_missing', { startTime: '2026-11-23T07:00:00Z' }, 404],
+  ['an invalid body', undefined, { startTime: 'soon' }, 400],
+])('%s leaves the existing booking unchanged', async (_name, id, payload, status) => {
+  const { app, booking } = await bookedApp();
+  const listBefore = (await app.inject({ method: 'GET', url: '/api/bookings' })).json();
+
+  const response = await reschedule(app, id ?? booking.id, payload);
+
+  expect(response.statusCode).toBe(status);
+  expect((await app.inject({ method: 'GET', url: '/api/bookings' })).json()).toEqual(listBefore);
 });

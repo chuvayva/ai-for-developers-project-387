@@ -2,7 +2,7 @@ import type { components } from '@calendar/api';
 import type { FastifyInstance } from 'fastify';
 import type { Clock } from '../app.ts';
 import { ApiFailure } from '../errors.ts';
-import { checkStartTime, toTimestamp } from '../slots.ts';
+import { checkStartTime, type StartTimeCheck, toTimestamp } from '../slots.ts';
 import { requireEventType, type Store } from '../store.ts';
 
 type Booking = components['schemas']['Booking'];
@@ -29,6 +29,35 @@ const rescheduleBookingBody = {
     eventTypeId: { type: 'string' },
   },
 } as const;
+
+/**
+ * The moment a start time names. The format checks the spelling. A spelling it
+ * accepts and `Date` cannot read, such as the offset `+03`, names no moment.
+ */
+function parseStartTime(startTime: string): Date {
+  const start = new Date(startTime);
+  if (Number.isNaN(start.getTime())) {
+    throw new ApiFailure('validation_failed', 'body/startTime must name a moment');
+  }
+  return start;
+}
+
+/** The slot of a check, or the failure of the contract. Synchronous, like its callers. */
+function requireSlot(check: StartTimeCheck, startTime: string, start: Date) {
+  if (check.status === 'not-a-slot') {
+    throw new ApiFailure(
+      'not_a_slot',
+      `${JSON.stringify(startTime)} is not the start of a slot of this event type.`,
+    );
+  }
+  if (check.status === 'taken') {
+    throw new ApiFailure(
+      'slot_taken',
+      `The slot starting at ${toTimestamp(start.getTime())} is already booked.`,
+    );
+  }
+  return check.slot;
+}
 
 export default async function bookingRoutes(
   fastify: FastifyInstance,
@@ -57,12 +86,7 @@ export default async function bookingRoutes(
       // Only the named fields are read, so any other property is dropped here.
       const { eventTypeId, startTime, guestName, guestEmail } = request.body;
 
-      // The format checks the spelling. A spelling it accepts and `Date` cannot
-      // read, such as the offset `+03`, names no moment for the server.
-      const start = new Date(startTime);
-      if (Number.isNaN(start.getTime())) {
-        throw new ApiFailure('validation_failed', 'body/startTime must name a moment');
-      }
+      const start = parseStartTime(startTime);
 
       const eventType = requireEventType(store, eventTypeId);
 
@@ -75,23 +99,12 @@ export default async function bookingRoutes(
         },
         start,
       );
-      if (check.status === 'not-a-slot') {
-        throw new ApiFailure(
-          'not_a_slot',
-          `${JSON.stringify(startTime)} is not the start of a slot of this event type.`,
-        );
-      }
-      if (check.status === 'taken') {
-        throw new ApiFailure(
-          'slot_taken',
-          `The slot starting at ${toTimestamp(start.getTime())} is already booked.`,
-        );
-      }
+      const slot = requireSlot(check, startTime, start);
 
       const booking = store.createBooking({
         eventType,
-        startTime: check.slot.startTime,
-        endTime: check.slot.endTime,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
         guestName,
         guestEmail,
         createdAt: toTimestamp(current.getTime()),
@@ -107,10 +120,7 @@ export default async function bookingRoutes(
     (request, reply) => {
       const { startTime, eventTypeId } = request.body;
 
-      const start = new Date(startTime);
-      if (Number.isNaN(start.getTime())) {
-        throw new ApiFailure('validation_failed', 'body/startTime must name a moment');
-      }
+      const start = parseStartTime(startTime);
 
       const { bookingId } = request.params;
       const booking = store.getBooking(bookingId);
@@ -128,29 +138,18 @@ export default async function bookingRoutes(
         {
           durationMinutes: eventType.durationMinutes,
           now: now(),
-          // The booking's own interval is free for the move.
+          // The booking's own interval is free for the reschedule.
           bookings: store.listBookings().filter((other) => other.id !== booking.id),
         },
         start,
       );
-      if (check.status === 'not-a-slot') {
-        throw new ApiFailure(
-          'not_a_slot',
-          `${JSON.stringify(startTime)} is not the start of a slot of this event type.`,
-        );
-      }
-      if (check.status === 'taken') {
-        throw new ApiFailure(
-          'slot_taken',
-          `The slot starting at ${toTimestamp(start.getTime())} is already booked.`,
-        );
-      }
+      const slot = requireSlot(check, startTime, start);
 
       const rescheduled: Booking = {
         ...booking,
         eventType,
-        startTime: check.slot.startTime,
-        endTime: check.slot.endTime,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
       };
       store.replaceBooking(rescheduled);
       reply.send(rescheduled);
