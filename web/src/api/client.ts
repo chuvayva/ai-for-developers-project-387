@@ -9,6 +9,7 @@ export {
   listBookings,
   listEventTypes,
   listSlots,
+  rescheduleBooking,
 } from '@calendar/api/client';
 export type {
   Booking,

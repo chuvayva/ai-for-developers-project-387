@@ -482,3 +482,200 @@ test('a booking stays on the list while its call is in progress and leaves when 
   now = new Date('2026-11-23T07:00:00Z');
   expect(await upcomingStarts(app)).toEqual([]);
 });
+
+function reschedule(app: FastifyInstance, bookingId: string, payload: unknown) {
+  return app.inject({
+    method: 'PATCH',
+    url: `/api/bookings/${bookingId}`,
+    payload: payload as object,
+  });
+}
+
+async function bookedApp(durationMinutes = 30) {
+  const app = build({ now: mondayMorning });
+  const eventTypeId = await createEventType(app, durationMinutes);
+  const created = await createBooking(app, { eventTypeId, ...valid });
+  return { app, eventTypeId, booking: created.json() };
+}
+
+test('rescheduling to a free slot keeps the identity and changes the interval', async () => {
+  const { app, booking } = await bookedApp();
+
+  const response = await reschedule(app, booking.id, { startTime: '2026-11-23T07:00:00Z' });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({
+    ...booking,
+    startTime: '2026-11-23T07:00:00Z',
+    endTime: '2026-11-23T07:30:00Z',
+  });
+  const list = await app.inject({ method: 'GET', url: '/api/bookings' });
+  expect(list.json()).toEqual([response.json()]);
+});
+
+test('rescheduling to another event type recomputes the end', async () => {
+  const { app, booking } = await bookedApp(30);
+  const hourId = await createEventType(app, 60, 'Long call');
+
+  const response = await reschedule(app, booking.id, {
+    startTime: '2026-11-23T07:00:00Z',
+    eventTypeId: hourId,
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({
+    id: booking.id,
+    eventType: { id: hourId, durationMinutes: 60 },
+    startTime: '2026-11-23T07:00:00Z',
+    endTime: '2026-11-23T08:00:00Z',
+  });
+});
+
+test('the own interval is free: the type changes at the same time', async () => {
+  const { app, booking } = await bookedApp(30);
+  const hourId = await createEventType(app, 60, 'Long call');
+
+  const response = await reschedule(app, booking.id, {
+    startTime: booking.startTime,
+    eventTypeId: hourId,
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().endTime).toBe('2026-11-23T07:00:00Z');
+});
+
+test('a shift inside the own interval is not a conflict', async () => {
+  // 15-minute steps of a 15-minute type overlap a 30-minute booking's interval.
+  const { app, booking } = await bookedApp(30);
+  const quarterId = await createEventType(app, 15, 'Quick call');
+
+  const response = await reschedule(app, booking.id, {
+    startTime: '2026-11-23T06:15:00Z',
+    eventTypeId: quarterId,
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().startTime).toBe('2026-11-23T06:15:00Z');
+});
+
+test('the old interval is a slot again after a reschedule', async () => {
+  const { app, eventTypeId, booking } = await bookedApp();
+  expect(await slotStarts(app, eventTypeId)).not.toContain(booking.startTime);
+
+  await reschedule(app, booking.id, { startTime: '2026-11-23T07:00:00Z' });
+
+  const starts = await slotStarts(app, eventTypeId);
+  expect(starts).toContain(booking.startTime);
+  expect(starts).not.toContain('2026-11-23T07:00:00Z');
+});
+
+test.each([
+  ['a missing startTime', {}],
+  ['a startTime that is not a date', { startTime: 'soon' }],
+  ['an eventTypeId that is not a string', { startTime: '2026-11-23T07:00:00Z', eventTypeId: 5 }],
+])('%s fails with validation_failed before the booking is looked up', async (_name, payload) => {
+  const { app } = await bookedApp();
+
+  const response = await reschedule(app, 'bkg_missing', payload);
+
+  expect(response.statusCode).toBe(400);
+  expect(response.json().code).toBe('validation_failed');
+});
+
+test('an unknown booking fails with booking_not_found before the event type is looked up', async () => {
+  const { app } = await bookedApp();
+
+  const response = await reschedule(app, 'bkg_missing', {
+    startTime: '2026-11-23T07:00:00Z',
+    eventTypeId: 'evt_missing',
+  });
+
+  expect(response.statusCode).toBe(404);
+  expect(response.json().code).toBe('booking_not_found');
+});
+
+test.each([
+  ['event_type_not_found', 404, { startTime: '2026-11-23T05:30:00Z', eventTypeId: 'evt_missing' }],
+  ['not_a_slot', 400, { startTime: '2026-11-23T06:07:00Z' }],
+  ['slot_taken', 409, { startTime: '2026-11-23T07:00:00Z' }],
+])('%s leaves the booking and the slots unchanged', async (code, status, payload) => {
+  const { app, eventTypeId, booking } = await bookedApp();
+  const other = await createBooking(app, {
+    eventTypeId,
+    startTime: '2026-11-23T07:00:00Z',
+    ...anna,
+  });
+  const slotsBefore = await slotStarts(app, eventTypeId);
+  const listBefore = (await app.inject({ method: 'GET', url: '/api/bookings' })).json();
+
+  const response = await reschedule(app, booking.id, payload);
+
+  expect(response.statusCode).toBe(status);
+  expect(response.json().code).toBe(code);
+  expect(other.statusCode).toBe(201);
+  expect(await slotStarts(app, eventTypeId)).toEqual(slotsBefore);
+  expect((await app.inject({ method: 'GET', url: '/api/bookings' })).json()).toEqual(listBefore);
+});
+
+test('a missing event type is reported before a start time that is not a slot', async () => {
+  const { app, booking } = await bookedApp();
+
+  const response = await reschedule(app, booking.id, {
+    startTime: '2026-11-23T06:07:00Z',
+    eventTypeId: 'evt_missing',
+  });
+
+  expect(response.json().code).toBe('event_type_not_found');
+});
+
+test('two simultaneous reschedules to the same slot leave one winner', async () => {
+  const { app, eventTypeId, booking } = await bookedApp();
+  const second = (
+    await createBooking(app, { eventTypeId, startTime: '2026-11-23T08:00:00Z', ...anna })
+  ).json();
+
+  const responses = await Promise.all([
+    reschedule(app, booking.id, { startTime: '2026-11-23T09:00:00Z' }),
+    reschedule(app, second.id, { startTime: '2026-11-23T09:00:00Z' }),
+  ]);
+
+  expect(responses.map((r) => r.statusCode).toSorted()).toEqual([200, 409]);
+});
+
+test('an omitted eventTypeId keeps the event type of the booking', async () => {
+  const { app, eventTypeId, booking } = await bookedApp(30);
+  await createEventType(app, 60, 'Other call');
+
+  const response = await reschedule(app, booking.id, { startTime: '2026-11-23T07:00:00Z' });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().eventType.id).toBe(eventTypeId);
+  expect(response.json().endTime).toBe('2026-11-23T07:30:00Z');
+});
+
+test('a booking whose call has passed can be rescheduled to a future slot', async () => {
+  let now = mondayMorning();
+  const app = build({ now: () => now });
+  const eventTypeId = await createEventType(app, 30);
+  const booking = (await createBooking(app, { eventTypeId, ...valid })).json();
+  now = new Date('2026-11-23T12:00:00Z');
+
+  const response = await reschedule(app, booking.id, { startTime: '2026-11-24T06:00:00Z' });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().id).toBe(booking.id);
+  expect(response.json().startTime).toBe('2026-11-24T06:00:00Z');
+});
+
+test.each([
+  ['a missing booking', 'bkg_missing', { startTime: '2026-11-23T07:00:00Z' }, 404],
+  ['an invalid body', undefined, { startTime: 'soon' }, 400],
+])('%s leaves the existing booking unchanged', async (_name, id, payload, status) => {
+  const { app, booking } = await bookedApp();
+  const listBefore = (await app.inject({ method: 'GET', url: '/api/bookings' })).json();
+
+  const response = await reschedule(app, id ?? booking.id, payload);
+
+  expect(response.statusCode).toBe(status);
+  expect((await app.inject({ method: 'GET', url: '/api/bookings' })).json()).toEqual(listBefore);
+});

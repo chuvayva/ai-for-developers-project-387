@@ -3,6 +3,7 @@ import { ApiRequestError, type ErrorCode } from './client.ts';
 const textByCode: Record<ErrorCode, string> = {
   validation_failed: 'The server did not accept these values. Check the fields and try again.',
   not_a_slot: 'This time cannot be booked. Choose another one.',
+  booking_not_found: 'This booking does not exist.',
   event_type_not_found: 'This event type does not exist.',
   slot_taken: 'Someone else has just booked this time. Choose another one.',
 };

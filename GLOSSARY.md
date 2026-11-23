@@ -20,6 +20,10 @@ _Avoid_: Meeting type, service, booking type
 One guest's reserved interval of the host's time for one event type, always made on a slot. Two bookings never overlap. In Russian, «бронирование».
 _Avoid_: Reservation, appointment, meeting, record
 
+**Reschedule**:
+To change the start time, the event type, or both, of an existing booking. The booking keeps its id and its guest. In Russian, «перенос».
+_Avoid_: Move, edit, update
+
 **Upcoming booking**:
 A booking that has not ended yet. A call in progress is still upcoming. In Russian, «предстоящая встреча».
 _Avoid_: Upcoming meeting, future booking, active booking

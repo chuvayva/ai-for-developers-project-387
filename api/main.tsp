@@ -52,6 +52,7 @@ model Health {
  * - `not_a_slot`, status 400. The start time breaks a slot rule other than the
  *   overlap. It is outside the booking window or working hours, off the step,
  *   already passed, or has a fractional second.
+ * - `booking_not_found`, status 404. No booking has this id.
  * - `event_type_not_found`, status 404. No event type has this id.
  * - `slot_taken`, status 409. The start time passes every other slot rule, and
  *   its interval overlaps an existing booking.
@@ -59,6 +60,7 @@ model Health {
 union ErrorCode {
   validationFailed: "validation_failed",
   notASlot: "not_a_slot",
+  bookingNotFound: "booking_not_found",
   eventTypeNotFound: "event_type_not_found",
   slotTaken: "slot_taken",
 }
@@ -226,6 +228,20 @@ model CreateBookingRequest {
   guestEmail: string;
 }
 
+model RescheduleBookingRequest {
+  /**
+   * The start of a slot of the event type that the booking has after the
+   * reschedule. The server derives the end from that event type's duration.
+   */
+  startTime: utcDateTime;
+
+  /**
+   * The id of an existing event type. Without it the booking keeps its event
+   * type.
+   */
+  eventTypeId?: string;
+}
+
 @route("/health")
 @tag("Service")
 @operationId("getHealth")
@@ -273,11 +289,16 @@ namespace Slots {
    * time zone. A day with no slot is present with an empty list. The server
    * leaves out start times that a booking overlaps or that have passed.
    *
+   * With `excludeBookingId` the slots are computed as if that booking did not
+   * exist, so its own interval is offered when it is otherwise free. This is
+   * how a host picks a new time for a booking. An id that names no booking has
+   * no effect.
+   *
    * Fails with 404 `event_type_not_found` when no event type has this id.
    */
   @operationId("listSlots")
   @get
-  op list(@path eventTypeId: string): SlotDay[] | NotFound;
+  op list(@path eventTypeId: string, @query excludeBookingId?: string): SlotDay[] | NotFound;
 }
 
 @route("/bookings")
@@ -311,4 +332,27 @@ namespace Bookings {
     @statusCode _: 201;
     @body body: Booking;
   } | BadRequest | NotFound | Conflict;
+
+  /**
+   * Reschedules a booking: gives it a new start time, a new event type, or
+   * both. Its id, guest name, guest email and `createdAt` stay as they are, and
+   * its end is derived from the duration of the event type it has afterwards.
+   * Any booking can be rescheduled, an ended one too. A failed request leaves
+   * the booking unchanged.
+   *
+   * The server checks the request in this order and returns the first failure:
+   *
+   * 1. 400 `validation_failed` when the body breaks a field rule.
+   * 2. 404 `booking_not_found` when no booking has `bookingId`.
+   * 3. 404 `event_type_not_found` when `eventTypeId` is given and no event type
+   *    has it.
+   * 4. 400 `not_a_slot` when `startTime` breaks a slot rule other than the
+   *    overlap.
+   * 5. 409 `slot_taken` when the interval overlaps a booking other than this
+   *    one. The booking's own interval is free for the move.
+   */
+  @operationId("rescheduleBooking")
+  @patch
+  @route("/{bookingId}")
+  op reschedule(@path bookingId: string, @body body: RescheduleBookingRequest): Booking | BadRequest | NotFound | Conflict;
 }
