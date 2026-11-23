@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/chuvayva/ai-for-developers-project-387/compare/v0.1.0...v0.2.0) (2026-11-23)
+
+
+### Features
+
+* bring over the calendar app from project 386 ([0748d9d](https://github.com/chuvayva/ai-for-developers-project-387/commit/0748d9d41778443eae86ac91fcc88cc23eadc3f2))
+* call the api from the web through a generated sdk ([048a456](https://github.com/chuvayva/ai-for-developers-project-387/commit/048a456406dccd83fbc56bcf30a25dcb236d19d8))
+* reschedule bookings ([8f81759](https://github.com/chuvayva/ai-for-developers-project-387/commit/8f81759a25a160155731a4e5481aaf67ea7d6119))
+
 ## 0.1.0 (2026-11-22)
 
 
