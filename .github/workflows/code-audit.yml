@@ -58,7 +58,10 @@ jobs:
             No maintainer is watching this run, so nobody can answer you during it.
             The link to this run is ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
 
-            1. Search every tracked file for the words TODO, FIXME and HACK with Grep. Skip
+            1. Search every tracked file for the words TODO, FIXME and HACK with Grep, ignoring
+               case and matching whole words: the pattern `\b(TODO|FIXME|HACK)\b` with `-i`.
+               That finds `TODO:`, `todo`, `Fixme(name):` and the like, and skips identifiers
+               such as `todoList`. Skip
                `node_modules/`, `api/generated/`, `pnpm-lock.yaml` and `CHANGELOG.md`, and skip
                matches that are not a code comment, such as this audit's own workflow and prompt.
             2. For each finding, search the existing issues, open and closed, with `gh issue list
