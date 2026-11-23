@@ -1,10 +1,15 @@
-import { Anchor, Container, Paper, Stack, Text, Title } from '@mantine/core';
+import { Anchor, Button, Container, Paper, Stack, Text, Title } from '@mantine/core';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { type Booking, listBookings, send } from '../api/client.ts';
+import { RescheduleForm } from '../components/RescheduleForm.tsx';
 import { formatHostInterval, HOST_TIME_ZONE } from '../hostTime.ts';
 import { useLoadOnMount } from '../useLoadOnMount.ts';
 
-function BookingList({ bookings }: { bookings: Booking[] }) {
+function BookingList(props: { bookings: Booking[]; onRescheduled: (booking: Booking) => void }) {
+  const { bookings } = props;
+  const [rescheduling, setRescheduling] = useState<string>();
+
   if (bookings.length === 0) {
     return <Text c="dimmed">No upcoming bookings.</Text>;
   }
@@ -21,6 +26,20 @@ function BookingList({ bookings }: { bookings: Booking[] }) {
           <Text size="sm" c="dimmed">
             {booking.guestEmail}
           </Text>
+          {rescheduling === booking.id ? (
+            <RescheduleForm
+              booking={booking}
+              onRescheduled={(moved) => {
+                setRescheduling(undefined);
+                props.onRescheduled(moved);
+              }}
+              onClose={() => setRescheduling(undefined)}
+            />
+          ) : (
+            <Button variant="default" mt="sm" onClick={() => setRescheduling(booking.id)}>
+              Reschedule
+            </Button>
+          )}
         </Paper>
       ))}
     </Stack>
@@ -30,7 +49,7 @@ function BookingList({ bookings }: { bookings: Booking[] }) {
 const load = () => send(listBookings());
 
 export function HostBookingsPage() {
-  const { value: bookings, loading } = useLoadOnMount(load, []);
+  const { value: bookings, loading, update } = useLoadOnMount(load, []);
 
   return (
     <Container size="sm" py="xl">
@@ -43,7 +62,18 @@ export function HostBookingsPage() {
       <Stack mt="lg">
         {loading === 'loading' && <Text c="dimmed">Loading the bookings.</Text>}
         {loading === 'failed' && <Text c="red">The bookings could not be loaded.</Text>}
-        {loading === 'loaded' && <BookingList bookings={bookings} />}
+        {loading === 'loaded' && (
+          <BookingList
+            bookings={bookings}
+            onRescheduled={(moved) =>
+              update((current) =>
+                current
+                  .map((booking) => (booking.id === moved.id ? moved : booking))
+                  .toSorted((a, b) => a.startTime.localeCompare(b.startTime)),
+              )
+            }
+          />
+        )}
       </Stack>
 
       <Anchor component={Link} to="/" mt="xl" display="inline-block">

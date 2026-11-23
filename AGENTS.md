@@ -41,7 +41,7 @@ The command starts its own server on `127.0.0.1:3100` and its own Vite dev serve
 
 Every run starts with no event types and no bookings, and all test files share that one server. A test creates the data it needs and uses names of its own, so that tests do not depend on each other. Tests choose slots relative to today. Do not fix the clock.
 
-A booking takes its interval from every event type, and the tests run in parallel. A test that books uses a day of the booking window that no other test books on, and never fills that day. `e2e/tests/guest-booking.spec.ts` uses days 5 and 7 after today, and `e2e/tests/host-bookings.spec.ts` uses day 9. Tomorrow stays free of bookings. `e2e/tests/helpers.ts` holds the steps the test files share.
+A booking takes its interval from every event type, and the tests run in parallel. A test that books uses a day of the booking window that no other test books on, and never fills that day. `e2e/tests/guest-booking.spec.ts` uses days 5 and 7 after today, `e2e/tests/host-bookings.spec.ts` uses day 9, and `e2e/tests/host-reschedule.spec.ts` uses day 11. Tomorrow stays free of bookings. `e2e/tests/helpers.ts` holds the steps the test files share.
 
 Add or update an end-to-end test when a change adds or alters something a user does in the browser across the web and the server, such as creating an event type or booking a slot. Server rules and component details stay in the `server` and `web` tests.
 
